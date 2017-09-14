@@ -23,68 +23,74 @@
     @private
     NSMutableArray *_pleated;
 }
-static NSPredicate *filterBlock;
 
-+(void)load {
-    filterBlock = [NSPredicate predicateWithBlock:^BOOL(IORegNode* evaluatedIORegNode, NSDictionary *bindings){
-        IORegObj* evaluatedObject = [evaluatedIORegNode node];
-        NSString *value = [bindings objectForKey:@"value"];
-        for (NSString *key in [bindings objectForKey:@"keys"]) {
-            if ([key isEqualToString:@"name"]) {
-                if ([[evaluatedObject name] rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound)
-                    return true;
-            }
-            else if ([key isEqualToString:@"bundle"])
-            {
-                if ([[(IORegObj *)evaluatedObject bundle] rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound)
-                    return true;
-            }
-            else if ([key isEqualToString:@"class"]) {
-                if ([[evaluatedObject ioclass] rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound)
-                    return true;
-            }
-            else if ([key isEqualToString:@"inheritance"]) {
-                if ([[evaluatedObject classChain] containsRange:value])
-                    return true;
-            }
-            else if ([key isEqualToString:@"keys"]) {
-                if ([[[evaluatedObject properties] valueForKey:@"key"] containsRange:value])
-                return true;
-            }
-            else if ([key isEqualToString:@"values"]) {
-//NSLog(@"%@", evaluatedObject.name);
-if ( [evaluatedObject isKindOfClass:IORegObj.class] &&  [ evaluatedObject.name isEqualToString:@"IOHDIXHDDriveOutKernel"] ) {
-    NSLog(@"break");
-}
-                NSArray* prop = [evaluatedObject properties];
-                NSArray* prop2 = [prop valueForKey:@"value"];
-                if ([prop2 containsRange:value]) {
++(NSPredicate*)filterBlock
+{
+  static NSPredicate *filterBlock = nil;
+
+    if ( !filterBlock )
+    {
+        filterBlock = [NSPredicate predicateWithBlock:^BOOL(IORegNode* evaluatedIORegNode, NSDictionary *bindings){
+            IORegObj* evaluatedObject = [evaluatedIORegNode node];
+            NSString *value = [bindings objectForKey:@"value"];
+            for (NSString *key in [bindings objectForKey:@"keys"]) {
+                if ([key isEqualToString:@"name"]) {
+                    if ([[evaluatedObject name] rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound)
+                        return true;
+                }
+                else if ([key isEqualToString:@"bundle"])
+                {
+                    if ([[(IORegObj *)evaluatedObject bundle] rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound)
+                        return true;
+                }
+                else if ([key isEqualToString:@"class"]) {
+                    if ([[evaluatedObject ioclass] rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound)
+                        return true;
+                }
+                else if ([key isEqualToString:@"inheritance"]) {
+                    if ([[evaluatedObject classChain] containsRange:value])
+                        return true;
+                }
+                else if ([key isEqualToString:@"keys"]) {
+                    if ([[[evaluatedObject properties] valueForKey:@"key"] containsRange:value])
                     return true;
                 }
-                for (IORegProperty* p in prop) {
-                    if ( p.type == 18 ) {
-//                        for (
-                        if ( [[p.children valueForKey:@"value"] containsRange:value] ) {
-                            return true;
+                else if ([key isEqualToString:@"values"]) {
+    //NSLog(@"%@", evaluatedObject.name);
+    if ( [evaluatedObject isKindOfClass:IORegObj.class] &&  [ evaluatedObject.name isEqualToString:@"IOHDIXHDDriveOutKernel"] ) {
+        NSLog(@"break");
+    }
+                    NSArray* prop = [evaluatedObject properties];
+                    NSArray* prop2 = [prop valueForKey:@"value"];
+                    if ([prop2 containsRange:value]) {
+                        return true;
+                    }
+                    for (IORegProperty* p in prop) {
+                        if ( p.type == 18 ) {
+    //                        for (
+                            if ( [[p.children valueForKey:@"value"] containsRange:value] ) {
+                                return true;
+                            }
                         }
                     }
                 }
+                else if ([key isEqualToString:@"state"])
+                {
+                    if ([evaluatedObject isActive]) {
+                        if ([@"Active" rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound) return true;
+                    }
+                    else if ([evaluatedObject isRegistered]) {
+                        if ([@"Registered" rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound) return true;
+                    }
+                    else if ([evaluatedObject isMatched]) {
+                        if ([@"Matched" rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound) return true;
+                    }
+                }
             }
-            else if ([key isEqualToString:@"state"])
-            {
-                if ([evaluatedObject isActive]) {
-                    if ([@"Active" rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound) return true;
-                }
-                else if ([evaluatedObject isRegistered]) {
-                    if ([@"Registered" rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound) return true;
-                }
-                else if ([evaluatedObject isMatched]) {
-                    if ([@"Matched" rangeOfString:value options:NSCaseInsensitiveSearch].location != NSNotFound) return true;
-                }
-            }
-        }
-        return false;
-    }];
+            return false;
+        }];
+    }
+    return filterBlock;
 }
 
 -(instancetype)initWithNode:(IORegObj *)root on:(NSString *)plane{
@@ -114,7 +120,7 @@ if ( [evaluatedObject isKindOfClass:IORegObj.class] &&  [ evaluatedObject.name i
             return [obj boolValue] && ![key isEqualToString:@"property"] && ![key isEqualToString:@"showAll"];
         }] allObjects]};
         self.children = [[[self.flat objectsPassingTest:^BOOL(IORegNode * obj, BOOL *stop){
-            return [filterBlock evaluateWithObject:obj substitutionVariables:bindings];
+            return [[self.class filterBlock] evaluateWithObject:obj substitutionVariables:bindings];
         }] allObjects] mutableCopy];
     }
     else if (_pleated) self.children = _pleated;

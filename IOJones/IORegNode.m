@@ -21,17 +21,40 @@
 
 
 @implementation IORegNode
-static NSDateFormatter *dateFormatter;
-static NSPredicate *hideBlock;
+//static NSDateFormatter *dateFormatter;
+//static NSPredicate *hideBlock;
 
 @synthesize node = _node;
-+(void)load{
-    dateFormatter = [NSDateFormatter new];
-    [dateFormatter setDateStyle:NSDateFormatterShortStyle];
-    [dateFormatter setTimeStyle:NSDateFormatterMediumStyle];
-    hideBlock = [NSPredicate predicateWithBlock:^BOOL(id evaluatedObject, NSDictionary *bindings){
-        return [[evaluatedObject node] status] != IORegStatusTerminated;
-    }];
+
+//+(void)load{
+//    dateFormatter = [NSDateFormatter new];
+//    [dateFormatter setDateStyle:NSDateFormatterShortStyle];
+//    [dateFormatter setTimeStyle:NSDateFormatterMediumStyle];
+//    hideBlock = [NSPredicate predicateWithBlock:^BOOL(id evaluatedObject, NSDictionary *bindings){
+//        return [[evaluatedObject node] status] != IORegStatusTerminated;
+//    }];
+//}
+
++(NSDateFormatter*)dateFormatter;
+{
+  static NSDateFormatter *dateFormatter = nil;
+    if ( !dateFormatter ) {
+        dateFormatter = [NSDateFormatter new];
+        [dateFormatter setDateStyle:NSDateFormatterShortStyle];
+        [dateFormatter setTimeStyle:NSDateFormatterMediumStyle];
+    }
+    return dateFormatter;
+}
+
++(NSPredicate*)hideBlock;
+{
+static NSPredicate *hideBlock = nil;
+    if ( !hideBlock ) {
+        hideBlock = [NSPredicate predicateWithBlock:^BOOL(id evaluatedObject, NSDictionary *bindings){
+            return [[evaluatedObject node] status] != IORegStatusTerminated;
+        }];
+    }
+    return hideBlock;
 }
 
 -(instancetype)initWithNode:(IORegObj *)node on:(IORegNode *)parent{
@@ -67,7 +90,7 @@ static NSPredicate *hideBlock;
     return _node;
 }
 -(NSMutableArray *)children {
-    return _node.document.hiding?[[_children filteredArrayUsingPredicate:hideBlock] mutableCopy]:_children;
+    return _node.document.hiding?[[_children filteredArrayUsingPredicate:[IORegNode hideBlock]] mutableCopy]:_children;
 }
 -(NSDictionary *)dictionaryRepresentation {
     return _children.count
@@ -94,8 +117,8 @@ static NSPredicate *hideBlock;
 }
 -(NSString *)metaData {
     if (_node.status == IORegStatusTerminated)
-        return [NSString stringWithFormat:@"%@\nDiscovered: %@\nTerminated: %@", _node.name, [dateFormatter stringFromDate:_node.added], [dateFormatter stringFromDate:_node.removed]];
-    return [NSString stringWithFormat:@"%@\nDiscovered: %@", _node.name, [dateFormatter stringFromDate:_node.added]];
+        return [NSString stringWithFormat:@"%@\nDiscovered: %@\nTerminated: %@", _node.name, [[IORegNode dateFormatter] stringFromDate:_node.added], [[IORegNode dateFormatter] stringFromDate:_node.removed]];
+    return [NSString stringWithFormat:@"%@\nDiscovered: %@", _node.name, [[IORegNode dateFormatter] stringFromDate:_node.added]];
 }
 -(void)walk:(IOIteratorT*)iterator
 {

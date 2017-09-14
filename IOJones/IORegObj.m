@@ -23,41 +23,88 @@
     @private
     NSHashTable *_nodes;
 }
-static NSArray *systemPlanes;
-static NSString *systemName, *systemType;
-static NSDictionary *red, *green;
+//static NSArray *systemPlanes;
+//static NSString *systemName;
+static NSString *systemType;
+//static NSDictionary *red, *green;
 
-+(void)load
-{
-    red = @{NSForegroundColorAttributeName:[NSColor redColor], NSStrikethroughStyleAttributeName:@1};
-    green = @{NSForegroundColorAttributeName:[NSColor colorWithCalibratedRed:0 green:0.75 blue:0 alpha:1], NSUnderlineStyleAttributeName:@1};
-    struct host_basic_info info;
-    UInt32 size = sizeof(struct host_basic_info);
-    char *type, *subtype;
-    host_info(mach_host_self(), HOST_BASIC_INFO, (host_info_t)&info, &size);
-    systemName = [NSHost.currentHost localizedName];
-    slot_name(info.cpu_type, info.cpu_subtype, &type, &subtype);
-    systemType = [NSString stringWithCString:type encoding:NSMacOSRomanStringEncoding];
+//+(void)load
+//{
+//    red = @{NSForegroundColorAttributeName:[NSColor redColor], NSStrikethroughStyleAttributeName:@1};
+//    green = @{NSForegroundColorAttributeName:[NSColor colorWithCalibratedRed:0 green:0.75 blue:0 alpha:1], NSUnderlineStyleAttributeName:@1};
+//    struct host_basic_info info;
+//    UInt32 size = sizeof(struct host_basic_info);
+//    char *type, *subtype;
+//    host_info(mach_host_self(), HOST_BASIC_INFO, (host_info_t)&info, &size);
+//    systemName = [NSHost.currentHost localizedName];
+//    slot_name(info.cpu_type, info.cpu_subtype, &type, &subtype);
+//    systemType = [NSString stringWithCString:type encoding:NSMacOSRomanStringEncoding];
 //    io_registry_entry_t root = IORegistryGetRootEntry(kIOMasterPortDefault);
-    IOObjectT* root = [IOObjectT IORegistryGetRootEntry];
-    NSMutableArray *planes = [NSMutableArray array];
+//    IOObjectT* root = [IOObjectT IORegistryGetRootEntry];
+//    NSMutableArray *planes = [NSMutableArray array];
 //    for (NSString *plane in [(__bridge_transfer NSDictionary *)IORegistryEntryCreateCFProperty(root, CFSTR("IORegistryPlanes"), kCFAllocatorDefault, 0) allValues]) {
-    for (NSString *plane in [[root IORegistryEntryCreateCFProperty_key:@"IORegistryPlanes"] allValues]) {
-        if ([plane isEqualToString:@kIOServicePlane]) [planes insertObject:plane atIndex:0];
-        else [planes addObject:plane];
-    }
-    systemPlanes = [planes copy];
+//    for (NSString *plane in [[root IORegistryEntryCreateCFProperty_key:@"IORegistryPlanes"] allValues]) {
+//        if ([plane isEqualToString:@kIOServicePlane]) [planes insertObject:plane atIndex:0];
+//        else [planes addObject:plane];
+//    }
+//    systemPlanes = [planes copy];
 //    IOObjectRelease(root);
-}
-+(NSArray *)systemPlanes {
+//}
+
++(NSArray *)systemPlanes
+{
+  static NSArray *systemPlanes = nil;
+    if ( !systemPlanes ) {
+        IOObjectT* root = [IOObjectT IORegistryGetRootEntry];
+        NSMutableArray *planes = [NSMutableArray array];
+        for (NSString *plane in [[root IORegistryEntryCreateCFProperty_key:@"IORegistryPlanes"] allValues]) {
+            if ([plane isEqualToString:@kIOServicePlane]) [planes insertObject:plane atIndex:0];
+            else [planes addObject:plane];
+        }
+        systemPlanes = [planes copy];
+    }
     return systemPlanes;
 }
-+(NSString *)systemName {
++(NSString *)systemName
+{
+  static NSString *systemName = nil;
+    if ( !systemName ) {
+        systemName = [NSHost.currentHost localizedName];
+    }
     return systemName;
 }
 +(NSString *)systemType {
+  static NSString *systemType = nil;
+    if ( !systemType ) {
+        struct host_basic_info info;
+        UInt32 size = sizeof(struct host_basic_info);
+        host_info(mach_host_self(), HOST_BASIC_INFO, (host_info_t)&info, &size);
+        char *type, *subtype;
+        slot_name(info.cpu_type, info.cpu_subtype, &type, &subtype);
+        systemType = [NSString stringWithCString:type encoding:NSMacOSRomanStringEncoding];
+   }
     return systemType;
 }
+
++(NSDictionary*)red
+{
+  static NSDictionary *red = nil;
+    if ( !red ) {
+        red = @{NSForegroundColorAttributeName:[NSColor redColor], NSStrikethroughStyleAttributeName:@1};
+    }
+    return red;
+}
+
+
++(NSDictionary*)green
+{
+  static NSDictionary *green = nil;
+    if ( !green ) {
+        green = @{NSForegroundColorAttributeName:[NSColor colorWithCalibratedRed:0 green:0.75 blue:0 alpha:1], NSUnderlineStyleAttributeName:@1};
+    }
+    return green;
+}
+
 
 -(instancetype)initWithEntry:(IOObjectT*)entryT for:(Document *)document
 {
@@ -89,7 +136,7 @@ static NSDictionary *red, *green;
 //        _properties = [IORegProperty arrayWithDictionary:(__bridge_transfer NSMutableDictionary *)properties];
         _properties = [IORegProperty arrayWithDictionary:[entryT IORegistryEntryCreateCFProperties]];
         NSMutableDictionary *planes = [NSMutableDictionary dictionary];
-        for (NSString *plane in systemPlanes) {
+        for (NSString *plane in [self.class systemPlanes]) {
 //            if (!IORegistryEntryInPlane(entry, [plane cStringUsingEncoding:NSMacOSRomanStringEncoding])) continue;
             if (![entryT IORegistryEntryInPlane_plane:plane]) continue;
             if ([plane isEqualToString:@kIOServicePlane]) {
@@ -209,8 +256,8 @@ static NSDictionary *red, *green;
 -(id)displayName {
     switch (_status) {
         case IORegStatusInitial: return self.currentName;
-        case IORegStatusPublished: return [[NSAttributedString alloc] initWithString:self.currentName attributes:green];
-        case IORegStatusTerminated: return [[NSAttributedString alloc] initWithString:self.currentName attributes:red];
+        case IORegStatusPublished: return [[NSAttributedString alloc] initWithString:self.currentName attributes:[self.class green]];
+        case IORegStatusTerminated: return [[NSAttributedString alloc] initWithString:self.currentName attributes:[self.class red]];
     }
 }
 -(bool)isActive {
