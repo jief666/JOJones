@@ -6,19 +6,27 @@
 //  Licensed under GPLv3, full text at http://www.gnu.org/licenses/gpl-3.0.txt
 //
 
+#import "IOObjectT.h"
+#import "IOIteratorT.h"
+
 #import "Document.h"
-#import "IOReg.h"
+#import "IORegNode.h"
+#import "IORegRoot.h"
+#import "IORegObj.h"
+#import "IORegProperty.h"
 #import "Base.h"
 #import <IOKit/kext/KextManager.h>
 
-@implementation Document {
-    @private
+@implementation Document
+{
+  @private
     bool _drawer, _hiding;
     NSIndexSet *_selectedPlanes;
     NSArray *_selectedObjects;
     IONotificationPortRef _port;
-    io_iterator_t _publish, _terminate;
-    io_object_t _notice;
+    IOIteratorT* _publish;
+    IOIteratorT* _terminate;
+    IOObjectT* _notice;
     IBOutlet NSScrollView *_outlineView;
     IBOutlet NSBrowser *_browseView;
     __unsafe_unretained IBOutlet NSOutlineView *_treeView;
@@ -82,9 +90,11 @@
         else if (expert)
             break;
     if (![[expert.properties valueForKey:@"key"] containsObject:@"ACPI Tables"] && !self.fileURL) {
-        io_service_t e = IOServiceGetMatchingService(kIOMasterPortDefault, IORegistryEntryIDMatching(expert.entryID));
-        [expert addProperties:[NSSet setWithObject:[IORegProperty arrayWithDictionary:@{@"ACPI Tables":(__bridge_transfer NSDictionary *)IORegistryEntryCreateCFProperty(e, CFSTR("ACPI Tables"), kCFAllocatorDefault, 0)}]]];
-        IOObjectRelease(e);
+//        io_service_t e = IOServiceGetMatchingService(kIOMasterPortDefault, IORegistryEntryIDMatching(expert.entryID));
+        IOObjectT* e = [IOObjectT IOServiceGetMatchingService_matching:IORegistryEntryIDMatching(expert.entryID)];
+//        [expert addProperties:[NSSet setWithObject:[IORegProperty arrayWithDictionary:@{@"ACPI Tables":(__bridge_transfer NSDictionary *)IORegistryEntryCreateCFProperty(e, CFSTR("ACPI Tables"), kCFAllocatorDefault, 0)}]]];
+        [expert addProperties:[NSSet setWithObject:[IORegProperty arrayWithDictionary:@{@"ACPI Tables":[e IORegistryEntryCreateCFProperty_key:@"ACPI Tables"]}]]];
+//        IOObjectRelease(e);
     }
     NSError *err;
     NSData *data;
@@ -131,7 +141,7 @@
     [_allClasses setObject:nsroot forKey:nsroot];
     [_allBundles setObject:@"com.apple.kernel" forKey:nsroot];
     _hostname = [NSString stringWithFormat:@"%@ (%@)", (_systemName = [IORegObj systemName]), [IORegObj systemType]];
-    IORegObj *root = [self addObject:IORegistryGetRootEntry(kIOMasterPortDefault)];
+    IORegObj *root = [self addObject:[IOObjectT IORegistryGetRootEntry]];
     NSMutableArray *temp = [NSMutableArray array];
     for (NSString *plane in [IORegObj systemPlanes])
         [temp addObject:[[IORegRoot alloc] initWithNode:root on:plane]];
@@ -290,21 +300,22 @@
 }
 
 #pragma mark IOService Notifications
--(NSArray *)service:(io_iterator_t)iterator {
-    io_service_t service;
+-(NSArray *)service:(IOIteratorT*)iteratorT {
+    IOObjectT* serviceT;
     NSMutableArray *array = [NSMutableArray array];
-    while ((service = IOIteratorNext(iterator))) {
-        IORegObj *obj = [self addObject:service];
+    while ((serviceT = [iteratorT IOIteratorNext])) {
+        IORegObj *obj = [self addObject:serviceT];
         [array addObject:obj];
-        if (iterator == _terminate)
+        if (iteratorT == _terminate) {
             obj.removed = [NSDate date];
-        obj.status = iterator == _terminate ? IORegStatusTerminated : iterator == _publish ? IORegStatusPublished : IORegStatusInitial;
+        }
+        obj.status = iteratorT == _terminate ? IORegStatusTerminated : iteratorT == _publish ? IORegStatusPublished : IORegStatusInitial;
     }
     return [array copy];
 }
--(void)serviceNotification:(io_iterator_t)iterator {
+-(void)serviceNotification:(IOIteratorT*)iteratorT {
     NSArray *objs;
-    if ((objs = [self service:iterator])) {
+    if ((objs = [self service:iteratorT])) {
         NSRect scroll = self.scrollPosition;
         for (IORegObj *obj in objs) {
             for (NSString *path in [obj.planes.allValues valueForKey:@"path"]) {
@@ -318,18 +329,26 @@
         self.scrollPosition = scroll;
     }
 }
-void serviceNotification(void *refCon, io_iterator_t iterator) {
-    [(__bridge Document *)refCon serviceNotification:iterator];
+void serviceNotification(void *refCon, io_iterator_t iterator)
+{
+    Document* self = (__bridge Document *)refCon;
+    if ( iterator == self->_publish.io_iterator ) [self serviceNotification:self->_publish];
+    else if ( iterator == self->_terminate.io_iterator ) [self serviceNotification:self->_terminate];
+    else @throw @"bug";
 }
+
 -(void)busyNotification:(io_service_t)service {
     /*for (IORegNode *node in [[self addObject:service] registeredNodes]) {
         [node.children removeAllObjects];
         muteWithNotice(node, children, [node mutate])
     }*/
 }
-void busyNotification(void *refCon, io_service_t service, uint32_t messageType, void *messageArgument) {
-    if (messageType == 0xE0000120 && !messageArgument)
-        [(__bridge Document *)refCon busyNotification:service];
+void busyNotification(void *refCon, io_service_t service, uint32_t messageType, void *messageArgument)
+{
+    Document* self = (__bridge Document *)refCon;
+    if (messageType == 0xE0000120 && !messageArgument) {
+        [self busyNotification:service];
+    }
 }
 
 #pragma mark Nonatomic Properties
@@ -379,38 +398,60 @@ void busyNotification(void *refCon, io_service_t service, uint32_t messageType, 
 +(NSSet *)keyPathsForValuesAffectingSelectedPlane {
     return [NSSet setWithObjects:@"selectedPlanes", nil];
 }
--(IORegRoot *)selectedPlane {
+
+-(IORegRoot *)selectedPlane
+{
+    if ( _selectedPlanes.count == 0 ) return nil;
     return [_allPlanes objectAtIndex:_selectedPlanes.firstIndex];
 }
+
 -(NSTreeNode *)selectedRootNode {
     return (_treeView.window)?[_treeView itemAtRow:0]:[[_browseView loadedCellAtRow:0 column:0] representedObject];
 }
--(void)setUpdating:(bool)updating {
-    if (_port && !updating) {
+-(void)setUpdating:(bool)updating
+{
+    if (_port && !updating)
+    {
         IONotificationPortDestroy(_port);
         _port = 0;
-        if (_publish) IOObjectRelease(_publish);
-        if (_notice) IOObjectRelease(_notice);
-        if (_terminate) IOObjectRelease(_terminate);
+//        if (_publish) IOObjectRelease(_publish);
+//        if (_notice) IOObjectRelease(_notice);
+//        if (_terminate) IOObjectRelease(_terminate);
+        _publish = NULL;
+        _terminate = NULL;
+        _notice = NULL;
     }
-    else if (!_port && updating) {
+    else
+    if (!_port && updating)
+    {
         _port = IONotificationPortCreate(kIOMasterPortDefault);
         CFRunLoopAddSource(CFRunLoopGetCurrent(), IONotificationPortGetRunLoopSource(_port), kCFRunLoopDefaultMode);
-        if (IOServiceAddMatchingNotification(_port, kIOFirstPublishNotification, IOServiceMatching(kIOServiceClass), serviceNotification, (__bridge void *)self, &_publish) != KERN_SUCCESS) {
+        _publish = [IOIteratorT IOServiceAddMatchingNotification_port:_port notificationType:@kIOFirstPublishNotification matching:IOServiceMatching(kIOServiceClass) callback:serviceNotification refCon:self];
+        if ( !_publish ) {
+//        if (IOServiceAddMatchingNotification(_port, kIOFirstPublishNotification, IOServiceMatching(kIOServiceClass), serviceNotification, (__bridge void *)self, &_publish.io_iterator) != KERN_SUCCESS) {
             self.updating = false;
             return;
         }
-        io_service_t s;
-        while ((s = IOIteratorNext(_publish)))
+        IOObjectT* s;
+        while ((s = [_publish IOIteratorNext])) {
             [self addObject:s];
-        io_service_t expert = IOServiceGetMatchingService(kIOMasterPortDefault, IOServiceMatching("IOPlatformExpertDevice"));
-        kern_return_t ret = IOServiceAddInterestNotification(_port, expert, kIOBusyInterest, busyNotification, (__bridge void *)self, &_notice);
-        IOObjectRelease(expert);
-        if (ret != KERN_SUCCESS || IOServiceAddMatchingNotification(_port, kIOTerminatedNotification, IOServiceMatching(kIOServiceClass), serviceNotification, (__bridge void *)self, &_terminate) != KERN_SUCCESS){
-            self.updating = false;
-            return;
         }
-        while ((s = IOIteratorNext(_terminate))) {
+//        io_service_t expert = IOServiceGetMatchingService(kIOMasterPortDefault, IOServiceMatching("IOPlatformExpertDevice"));
+        IOObjectT* expert = [IOObjectT IOServiceGetMatchingService_matching:IOServiceMatching("IOPlatformExpertDevice")];
+//        kern_return_t ret = IOServiceAddInterestNotification(_port, expert, kIOBusyInterest, busyNotification, (__bridge void *)self, &_notice);
+        _notice = [expert IOServiceAddInterestNotification_port:_port interestType:@kIOBusyInterest callback:busyNotification refCon:self];
+//        IOObjectRelease(expert);
+        if ( !_notice )
+        {
+            //if ( IOServiceAddMatchingNotification(_port, kIOTerminatedNotification, IOServiceMatching(kIOServiceClass), serviceNotification, (__bridge void *)self, &_terminate.io_iterator) != KERN_SUCCESS )
+            _terminate = [IOIteratorT IOServiceAddMatchingNotification_port:_port notificationType:@kIOTerminatedNotification matching:IOServiceMatching(kIOServiceClass) callback:serviceNotification refCon:self];
+            if ( !_terminate )
+            {
+                self.updating = false;
+                return;
+            }
+        }
+        while ((s = [_terminate IOIteratorNext])) {
             [[self addObject:s] setStatus:IORegStatusTerminated];
         }
     }
@@ -496,15 +537,17 @@ void busyNotification(void *refCon, io_service_t service, uint32_t messageType, 
 }
 
 #pragma mark Functions
--(IORegObj *)addObject:(io_registry_entry_t)object {
-    UInt64 entry;
+-(IORegObj *)addObject:(IOObjectT*)object
+{
+    UInt64 entry = [object IORegistryEntryGetRegistryEntryID];
+
     IORegObj *temp;
-    IORegistryEntryGetRegistryEntryID(object, &entry);
-    if (!(temp = (__bridge IORegObj *)NSMapGet(_allObjects, (void *)entry))) {
+    temp = (__bridge IORegObj *)NSMapGet(_allObjects, (void *)entry);
+    if (!temp)
+    {
         temp = [[IORegObj alloc] initWithEntry:object for:self];
         NSMapInsertKnownAbsent(_allObjects, (void *)entry, (__bridge void *)temp);
     }
-    else IOObjectRelease(object);
     return temp;
 }
 - (void)addDict:(NSDictionary *)object{

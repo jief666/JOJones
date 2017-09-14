@@ -7,7 +7,10 @@
 //
 
 #import "AppDelegate.h"
-#import "IOReg.h"
+#import "IORegNode.h"
+#import "IORegRoot.h"
+#import "IORegObj.h"
+#import "IORegProperty.h"
 #import "Document.h"
 
 @implementation AppDelegate

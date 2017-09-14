@@ -8,18 +8,24 @@
 @class IORegRoot;
 @class IORegObj;
 @class NSMutableDictionarySet;
+@class IOObjectT;
 
 @interface Document : NSDocument <NSOutlineViewDelegate>
 
 @property (readonly) NSSearchField *findView;
 @property bool drawer, hiding;
 @property (readonly) IORegRoot *selectedPlane;
-@property (readonly) NSString *title, *drawerLabel;
+@property (readonly) NSString *title;
+@property (readonly) NSString *drawerLabel;
 @property (nonatomic) NSRect scrollPosition;
 @property (nonatomic, getter = isUpdating) bool updating;
 @property (nonatomic, getter = isOutline) bool outline;
+
 @property (nonatomic) NSIndexSet *selectedPlanes;
-@property NSArray *selectedObjects, *allPlanes;
+
+@property NSArray<IORegRoot*> *selectedObjects;
+@property NSArray<IORegRoot*> *allPlanes;
+
 @property NSString *systemName, *hostname;
 @property NSDate *timestamp;
 @property NSMutableDictionarySet *allClasses, *allBundles;
@@ -45,6 +51,6 @@
 -(IBAction)revealKext:(id)sender;
 -(IBAction)removeTerminated:(id)sender;
 
--(IORegObj *)addObject:(io_registry_entry_t)object;
+-(IORegObj *)addObject:(IOObjectT*)object;
 
 @end

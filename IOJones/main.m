@@ -8,8 +8,10 @@
 
 #import <Cocoa/Cocoa.h>
 
-void handle_exception(NSException *exception) {
-    @try {
+void handle_exception(NSException *exception)
+{
+    @try
+    {
     NSString *file = [NSString stringWithFormat:@"/tmp/%ld.plist", roundtol([[NSDate date] timeIntervalSince1970])];
     NSMutableDictionary *d = [NSMutableDictionary dictionary];
     if (exception.name) [d setObject:exception.name forKey:@"name"];
@@ -20,11 +22,19 @@ void handle_exception(NSException *exception) {
     [d writeToFile:file atomically:true];
     NSRunAlertPanel(@"Uncaught Exception", @"An uncaught exception has occurred, and the program will now terminate. Please post the revealed file (may contain personal information), to %@", nil, nil, nil, @"http://sourceforge.net/projects/iojones/support");
     [NSWorkspace.sharedWorkspace selectFile:file inFileViewerRootedAtPath:file];
-    } @catch (NSException *e) {}
+    }
+    @catch (NSException *e) {}
 }
 
 int main(int argc, char *argv[])
 {
-    NSSetUncaughtExceptionHandler(&handle_exception);
-    return NSApplicationMain(argc, (const char **)argv);
+    //NSSetUncaughtExceptionHandler(&handle_exception);
+    @try
+    {
+        return NSApplicationMain(argc, (const char **)argv);
+    }
+    @catch(NSString* s)
+    {
+        NSLog(@"Exception : %@", s);
+    }
 }
